@@ -157,7 +157,7 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     return ['xml'];
   }
 
-  private function setShopInfo(){
+  private function setShopInfo() {
     /** @var \Drupal\yandex_yml\YandexYml\Shop\YandexYmlShop $shop_info */
     $shop_info = \Drupal::service('yandex_yml.shop')
       ->setName($this->options['store_name'])
@@ -165,7 +165,7 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     $this->generator->setShopInfo($shop_info);
   }
 
-  private function setCurrencyInfo(){
+  private function setCurrencyInfo() {
     /** @var \Drupal\yandex_yml\YandexYml\Currency\YandexYmlCurrency $currency */
     $currency = \Drupal::service('yandex_yml.currency')
       ->setId($this->options['store_currency_id'])
@@ -173,15 +173,21 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     $this->generator->addCurrency($currency);
   }
 
-  private function setOffers($rows){
-    $fields = $this->options["offer"];
+  private function setOffers($rows) {
+    $fields = $this->options['offer'];
     foreach ($rows as $row) {
       /** @var \Drupal\yandex_yml\YandexYml\Offer\YandexYmlOfferSimple $offer_simple */
       $offer_simple = \Drupal::service('yandex_yml.offer.simple');
       foreach ($fields as $field => $func) {
-        $func = "set$func";
-        $value = $row[$field]->__toString();
-        $offer_simple->$func($value);
+        if (isset($row[$field])) {
+          $func = "set$func";
+          $value = $row[$field]->__toString();
+          $offer_simple->$func($value);
+        }
+      }
+
+      if (array_search('SalesNotes', $fields) === FALSE) {
+        $offer_simple->setSalesNotes($this->options['sales_notes']);
       }
 
       $this->generator->addOffer($offer_simple);

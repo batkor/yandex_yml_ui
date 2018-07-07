@@ -128,6 +128,7 @@ trait yandexYmlTrait {
       'ManufacturerWarranty',
       'CountryOfOrigin',
       'Barcode',
+      'SalesNotes'
     ];
     return array_combine($elems, $elems);
   }
