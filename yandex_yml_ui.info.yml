@@ -1,0 +1,9 @@
+name: 'Yandex yml UI'
+type: module
+description: 'This module add UI for yandex_yml module'
+core: 8.x
+package: 'Custom'
+dependencies:
+  - views
+  - rest
+  - serialization
