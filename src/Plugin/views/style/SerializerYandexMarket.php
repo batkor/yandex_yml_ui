@@ -6,6 +6,7 @@ use Drupal\Core\Cache\Cache;
 use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\rest\Plugin\views\style\Serializer;
+use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\views\Plugin\views\style\StylePluginBase;
 use Drupal\yandex_yml_ui\Traits\yandexYmlTrait;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -96,6 +97,9 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     return [];
   }
 
+  public function getFormats() {
+    return ['xml'];
+  }
 
   /**
    * {@inheritdoc}
@@ -115,7 +119,8 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     ];
 
     $form['main']['left'] += $this->getStoreDetailElems();
-    $form['main']['left'] += $this->getProductFormElems($form, $form_state);
+    $form['main']['left'] += $this->getOfferFormElems();
+    $form['main']['left'] += $this->getCategoryFormElems();
 
     $form['main']['right'] = [
       '#type' => 'container',
@@ -124,6 +129,8 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     ];
 
     $form['main']['right'] += $this->getCurrencyFormElems();
+    $form['main']['right'] += $this->getOfferCustomFormElems();
+
 
   }
 
@@ -147,14 +154,11 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
     $this->generator = \Drupal::service('yandex_yml.generator');
     $this->setShopInfo();
     $this->setCurrencyInfo();
+    $this->setCategoryInfo();
     $this->setOffers($rows);
     $output = $this->generator->getResponceData();
 
     return $output;
-  }
-
-  public function getFormats() {
-    return ['xml'];
   }
 
   private function setShopInfo() {
@@ -163,6 +167,34 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
       ->setName($this->options['store_name'])
       ->setCompany($this->options['store_fullname']);
     $this->generator->setShopInfo($shop_info);
+  }
+
+  private function setCategoryInfo() {
+    if ($this->options["category"] === 'none') {
+      return;
+    }
+    $vocabulary = Vocabulary::load($this->options["category"]);
+    /** @var \Drupal\yandex_yml\YandexYml\Category\YandexYmlCategory $category */
+    $category = \Drupal::service('yandex_yml.category')
+      ->setId('0')
+      ->setName($vocabulary->label());
+    $this->generator->addCategory($category);
+
+    $categories = \Drupal::entityTypeManager()
+      ->getStorage('taxonomy_term')
+      ->loadTree($this->options["category"]);
+
+    /** @var Object $term */
+    foreach ($categories as $term) {
+      $category = \Drupal::service('yandex_yml.category')
+        ->setId($term->tid)
+        ->setName($term->name);
+
+      if (!empty($term->parents)) {
+        $category->setParentId(reset($term->parents));
+      }
+      $this->generator->addCategory($category);
+    }
   }
 
   private function setCurrencyInfo() {
@@ -174,20 +206,25 @@ class SerializerYandexMarket extends StylePluginBase implements CacheableDepende
   }
 
   private function setOffers($rows) {
-    $fields = $this->options['offer'];
+    $fields = $this->options['offer'][$this->options["offer_id"]]['elems'];
     foreach ($rows as $row) {
       /** @var \Drupal\yandex_yml\YandexYml\Offer\YandexYmlOfferSimple $offer_simple */
       $offer_simple = \Drupal::service('yandex_yml.offer.simple');
-      foreach ($fields as $field => $func) {
-        if (isset($row[$field])) {
-          $func = "set$func";
+      foreach ($fields as $field => $datum) {
+        if (isset($row[$field]) && $datum['elem'] !== 'none') {
           $value = $row[$field]->__toString();
-          $offer_simple->$func($value);
+          if ($datum['elem'] === 'parametr' && !empty($datum['param'])) {
+            $offer_simple->setParam($datum['param'], $value);
+          }
+          $func = "set{$datum['elem']}";
+          if (method_exists($offer_simple, $func)) {
+            $offer_simple->$func($value);
+          }
         }
       }
 
       if (array_search('SalesNotes', $fields) === FALSE) {
-        $offer_simple->setSalesNotes($this->options['sales_notes']);
+        $offer_simple->setSalesNotes($this->options['offer'][$this->options["offer_id"]]['sales_notes']);
       }
 
       $this->generator->addOffer($offer_simple);
